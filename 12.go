@@ -139,9 +139,4 @@ func main() {
 
 	go bot.Start()
 
-	http.HandleFunc("/name", nameHandler)
-	err = http.ListenAndServe(":8000", nil)
-	if err != nil {
-		fmt.Println("Произошла ошибка", err.Error())
-	}
 }
