@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	tele "gopkg.in/telebot.v4"
 )
 
@@ -35,8 +37,12 @@ func nameHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	erld := godotenv.Load()
+	if erld != nil {
+		log.Fatal("Error loading .env file")
+	}
 	pref := tele.Settings{
-		Token:  "8394736122:AAHMPRuZ2dqi_RDCtsWm_qqQALBRuOJn3q8",
+		Token:  os.Getenv("TOKEN"),
 		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
 	}
 
