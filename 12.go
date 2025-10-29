@@ -1,7 +1,8 @@
 package main
 
-//
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -25,6 +26,13 @@ var (
 	tempLogin  = make(map[int64]string)
 )
 
+const (
+	StateWaitLogin      = "wait_login"
+	StateWaitPassword   = "wait_password"
+	StateLoginWaitLogin = "login_wait_login"
+	StateLoginWaitPass  = "login_wait_password"
+)
+
 func nameHandler(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	fmt.Println("Привет:", name)
@@ -34,6 +42,11 @@ func nameHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Ошибка отправки:", err)
 		return
 	}
+}
+
+func hashPassword(password string) string {
+	hash := sha256.Sum256([]byte(password))
+	return hex.EncodeToString(hash[:])
 }
 
 func main() {
@@ -57,11 +70,29 @@ func main() {
 		userID = c.Sender().ID
 
 		if _, exists := users[userID]; exists {
-			return c.Send("Вы уже зарегестрированы")
+			return c.Send("Вы уже зарегестрированы, для авторизации используйте /login")
+		}
+		return c.Send("Здравствуйте, для регистрации используйте /register")
+	})
+
+	bot.Handle("/register", func(c tele.Context) error {
+		userID := c.Sender().ID
+
+		if _, exists := users[userID]; exists {
+			return c.Send("Вы уже зарегистрированы")
 		}
 
-		userStates[userID] = "Ожидание ввода логина"
-		return c.Send("Введите логин")
+		userStates[userID] = StateWaitLogin
+		return c.Send("Введите логин:")
+	})
+
+	bot.Handle("/login", func(c tele.Context) error {
+		userID := c.Sender().ID
+		if _, exists := users[userID]; !exists {
+			return c.Send("Вы ещё не зарегестрированы")
+		}
+		userStates[userID] = StateLoginWaitLogin
+		return c.Send("Введите ваш логин")
 	})
 
 	bot.Handle(tele.OnText, func(c tele.Context) error {
@@ -70,23 +101,39 @@ func main() {
 
 		switch userStates[userID] {
 
-		case "Ожидание ввода логина":
+		case StateWaitLogin:
 			tempLogin[userID] = text
 			userStates[userID] = "wait_password"
 			return c.Send("Теперь введите пароль:")
 
-		case "wait_password":
+		case StateWaitPassword:
 			users[userID] = User{
 				Login:    tempLogin[userID],
-				Password: text,
+				Password: hashPassword(text),
 			}
+
 			delete(userStates, userID)
 			delete(tempLogin, userID)
 
 			return c.Send("Регистрация завершена")
 
+		case StateLoginWaitLogin:
+			if users[userID].Login != text {
+				return c.Send("Неверный логин. Попробуйте /login снова")
+			}
+			userStates[userID] = StateLoginWaitPass
+			return c.Send("Введите пароль:")
+
+		case StateLoginWaitPass:
+			if users[userID].Password != hashPassword(text) {
+				return c.Send("Неверный пароль. Попробуйте /login снова")
+			}
+
+			delete(userStates, userID)
+			return c.Send("Вы успешно авторизованы")
+
 		default:
-			return c.Send("Напишите /start для регистрации")
+			return c.Send("Напишите /register для регистрации")
 		}
 	})
 
